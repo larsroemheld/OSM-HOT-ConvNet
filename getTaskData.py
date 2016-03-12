@@ -14,6 +14,7 @@ import json
 import logging
 import math
 import os, sys, getopt
+import getOSMmap
 from PIL import Image
 from StringIO import StringIO
 
@@ -49,6 +50,8 @@ def getSoupStringConcat(soupTag):
 def deg2num(lat_deg, lon_deg, zoom):
     '''
     http://wiki.openstreetmap.org/wiki/Slippy_map_tilenames (see explanation there)
+    Note: x grows from west to east. y grows from north to south. However, lat grows from south to north (lon growth
+    west to east). Therefore, the relevant bounding box points are switches in x/y notation vs. lat/lon
     :param lat_deg:
     :param lon_deg:
     :param zoom:
@@ -69,6 +72,15 @@ def deg2float(lat_deg, lon_deg, zoom):
     xtile = (lon_deg + 180.0) / 360.0 * n
     ytile = (1.0 - math.log(math.tan(lat_rad) + (1 / math.cos(lat_rad))) / math.pi) / 2.0 * n
     return (xtile, ytile)
+def num2deg(xtile, ytile, zoom):
+    '''
+    Same as above -- return lat/lon of north-west corner of a given tile
+    '''
+    n = 2.0 ** zoom
+    lon_deg = xtile / n * 360.0 - 180.0
+    lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
+    lat_deg = math.degrees(lat_rad)
+    return (lat_deg, lon_deg)
 
 def getProjectMeta(projectID):
     '''
@@ -158,44 +170,60 @@ def getBboxImage(lat_min, lon_min, lat_max, lon_max, TMSurl, zoom, filename):
     taskWidth  = x_max - x_min + 1
     taskHeight = y_max - y_min + 1
 
-    # Note: this only makes sense for relatively small maps, as a complete task is kept in memory.
-    completeImage = Image.new('RGB', (taskWidth * 256, taskHeight * 256))
+    if TMSurl == "bing":
+        x_f_min, y_f_min = deg2float(lat_min, lon_min, zoom)
+        x_f_max, y_f_max = deg2float(lat_max, lon_max, zoom)
+        imageWidth  = int((x_f_max - x_f_min) * 256.0)
+        imageHeight = int((y_f_min - y_f_max) * 256.0)
 
-    imageURL = TMSurl.replace('{z}', str(zoom))
-    for x in range(x_min, x_max+1):
-        for y in range(y_min ,y_max+1):
-            url = imageURL.replace('{x}', str(x)).replace('{y}', str(y))
-            try:
-                r = requests.get(url)
-            except:
-                logging.error('Downloading an image failed: {0} \n\n image url: {1}'.format(sys.exc_info()[0], url))
-                return False
-
-            try:
-                tileImage = Image.open(StringIO(r.content))
-            except:
-                logging.error('A downloaded image could not be read: {0} \n\n image url: {1}'.format(sys.exc_info()[0], url))
-                return False
-
-            completeImage.paste(tileImage, ((x-x_min) * 256, (y-y_min) * 256))
-    # Now crop the image to correspond to the exact bounding box (as opposed to the tiled boundaries)
-    x_f, y_f = deg2float(lat_min, lon_min, zoom = 18)
-    offset_X_top = int((x_f - int(x_f)) * 256.0)
-    offset_Y_top = int((y_f - int(y_f)) * 256.0)
-    x_f, y_f = deg2float(lat_max, lon_max, zoom = 18)
-    offset_X_bottom = int((1 - (x_f - int(x_f))) * 256.0)
-    offset_Y_bottom = int((1 - (y_f - int(y_f))) * 256.0)
-    completeImage = completeImage.crop((offset_X_top, offset_Y_top, \
-                                        completeImage.size[0] - offset_X_bottom, completeImage.size[1] - offset_Y_bottom))
-    # Save the image
-    try:
-        completeImage.save(filename)
-    except:
-        logging.error('Saving the composite image failed: {0} \n\n image filename: {1}'.format(sys.exc_info()[0], completeFileName))
-        return False
-    else:
-        logging.info('Downloaded task map to ' + filename)
+        url = "http://dev.virtualearth.net/REST/v1/Imagery/Map/Aerial?mapArea={slat},{wlon},{nlat},{elon}&zoomLevel={zoom}&mapSize={sizex},{sizey}&key=" + bing_key
+        url = url.replace('{slat}', str(lat_min)).replace('{wlon}', str(lon_min)).replace('{nlat}', str(lat_max)).replace('{elon}', str(lon_max))
+        url = url.replace('{zoom}', str(zoom))
+        url = url.replace('{sizex}', str(imageWidth)).replace('{sizey}', str(imageHeight))
+        r = requests.get(url)
+        image = Image.open(StringIO(r.content))
+        image.save(filename)
         return True
+    else:
+        # Note: this only makes sense for relatively small maps, as a complete task is kept in memory.
+        completeImage = Image.new('RGB', (taskWidth * 256, taskHeight * 256))
+
+        imageURL = TMSurl.replace('{z}', str(zoom))
+        for x in range(x_min, x_max+1):
+            for y in range(y_min ,y_max+1):
+                url = imageURL.replace('{x}', str(x)).replace('{y}', str(y))
+                try:
+                    r = requests.get(url)
+                except:
+                    logging.error('Downloading an image failed: {0} \n\n image url: {1}'.format(sys.exc_info()[0], url))
+                    return False
+
+                try:
+                    tileImage = Image.open(StringIO(r.content))
+                except:
+                    logging.error('A downloaded image could not be read: {0} \n\n image url: {1}'.format(sys.exc_info()[0], url))
+                    return False
+
+                completeImage.paste(tileImage, ((x-x_min) * 256, (y-y_min) * 256))
+        # Now crop the image to correspond to the exact bounding box (as opposed to the tiled boundaries)
+        x_f, y_f = deg2float(lat_min, lon_min, zoom)
+        offset_X_top = int((x_f - int(x_f)) * 256.0)
+        # TODO - this offset is probably buggy, given the direction of Y!
+        offset_Y_top = int((y_f - int(y_f)) * 256.0)
+        x_f, y_f = deg2float(lat_max, lon_max, zoom)
+        offset_X_bottom = int((1 - (x_f - int(x_f))) * 256.0)
+        offset_Y_bottom = int((1 - (y_f - int(y_f))) * 256.0)
+        completeImage = completeImage.crop((offset_X_top, offset_Y_top, \
+                                            completeImage.size[0] - offset_X_bottom, completeImage.size[1] - offset_Y_bottom))
+        # Save the image
+        try:
+            completeImage.save(filename)
+        except:
+            logging.error('Saving the composite image failed: {0} \n\n image filename: {1}'.format(sys.exc_info()[0], completeFileName))
+            return False
+        else:
+            logging.info('Downloaded task map to ' + filename)
+            return True
 
 def getTaskImage(projectID, taskID, TMSurl, zoom=18):
     '''
@@ -217,8 +245,87 @@ def getTaskImage(projectID, taskID, TMSurl, zoom=18):
     completeFileName = folder + '/project{0}task{1}_complete.png'.format(str(projectID), str(taskID))
     return getBboxImage(lat_min, lon_min, lat_max, lon_max, TMS_url, zoom, completeFileName)
 
+def getTilesAndMapData(projectID, taskID, TMSurl, zoom=18):
+    '''
+
+    :param projectID:
+    :param taskID:
+    :param TMSurl:
+    :param zoom:
+    :return:
+    '''
+    status = getTaskStatus(projectID, taskID)
+    logging.info('Project {0} task {1} status: {2}'.format(projectID, taskID, status))
+    if status != 'Validated':
+        logging.info('... not validated, not useful.'.format(projectID, taskID, status))
+        return None
+
+    (lat_min, lon_min, lat_max, lon_max), (x_min, y_min, x_max, y_max) = \
+        getTaskBoundaries(projectID, taskID, zoom)
+    taskWidth  = x_max - x_min + 1
+    taskHeight = y_max - y_min + 1
+    logging.info('Found bounding box {0},{1} - {2},{3}, comprising {4} TMS/slippy map tiles'.format(lat_min, lon_min, lat_max, lon_max, taskWidth * taskHeight))
+
+    folder = 'osm-hot-images'
+    if not os.path.exists(folder): os.makedirs(folder)
+    tileFileName    = folder + '/project{0}task{1}_z{2}'.format(str(projectID), str(taskID), str(zoom)) + '_x{x}_y{y}.png'
+    mapDataFileName = folder + '/project{0}task{1}_z{2}'.format(str(projectID), str(taskID), str(zoom)) + '_x{x}_y{y}.json'
+    labelsFileName  = folder + '/project{0}task{1}_z{2}'.format(str(projectID), str(taskID), str(zoom)) + 'labels.json'
+
+    labels = []
+    imageURL = TMSurl.replace('{z}', str(zoom))
+    nDownloaded = 0
+    for x in range(x_min, x_max+1):
+        for y in range(y_min ,y_max+1):
+            tile_lat_min, tile_lon_min = num2deg(x, y, zoom)
+            tile_lat_max, tile_lon_max = num2deg(x+1, y+1, zoom)
+            map_data = getOSMmap.getOsmMapData_bbox(tile_lat_min, tile_lon_min, tile_lat_max, tile_lon_max)
+
+            if map_data is None:
+                logging.error('FAILED to get map data at x={0}, y={1}, skipping map data download'.format(x, y))
+            else:
+                logging.info('Got map data at x={0}, y={1}'.format(x, y))
+                fn = tileFileName.replace('{x}', str(x)).replace('{y}', str(y))
+                labels.append({fn: getOSMmap.osmMapHasTag(map_data, 'building')})
+
+                fn = mapDataFileName.replace('{x}', str(x)).replace('{y}', str(y))
+                with open(fn, 'w') as f:
+                    json.dump(map_data, f)
+
+            url = imageURL.replace('{x}', str(x)).replace('{y}', str(y))
+            try:
+                r = requests.get(url)
+            except:
+                logging.error('Downloading map image failed: {0} \n\n image url: {1}'.format(sys.exc_info()[0], url))
+            else:
+                try:
+                    tileImage = Image.open(StringIO(r.content))
+                except:
+                    logging.error('A downloaded image could not be read: {0} \n\n image url: {1}'.format(sys.exc_info()[0], url))
+                else:
+                    fn = tileFileName.replace('{x}', str(x)).replace('{y}', str(y))
+                    try:
+                        tileImage.save(fn)
+                    except:
+                        logging.error('Saving the tile image at x={0}, y={1} failed: {2} \n\n image filename: {3}'.format(x, y, sys.exc_info()[0], fn))
+                    else:
+                        logging.info('Downloaded task image to ' + fn)
+                        nDownloaded += 1
+    logging.info('... Downloaded {0} images out of a total of {1}'.format(nDownloaded, taskWidth * taskHeight))
+    with open(labelsFileName, 'w') as f:
+        json.dump(labels, f)
+    logging.info('... written labels file.'.format(nDownloaded, taskWidth * taskHeight))
+    return nDownloaded
+
+
+
 if __name__ == '__main__':
+    # TODO - bing
+
     logging.basicConfig(level=logging.DEBUG, encoding='UTF-8')
+
+    bing_key = os.environ.get('BING_MAPS_KEY')
+    print 'Found bing maps key: ' + bing_key
 
     HELPTEXT = 'getTaskData.py -p <HOT OSM project ID> -u <affiliated TMS url> [-t <taskID>]'
     try:
@@ -227,7 +334,7 @@ if __name__ == '__main__':
         print HELPTEXT
         sys.exit(2)
 
-    project_id, TMS_url = None, None
+    project_id, TMS_url, task_ids = None, None, None
     for opt, arg in opts:
         if opt == '-h':
             print HELPTEXT
@@ -245,25 +352,31 @@ if __name__ == '__main__':
     print "Project {0} metadata:".format(str(project_id))
     meta = getProjectMeta(project_id)
     print json.dumps(meta, indent=4, sort_keys=True)
+    with open('project-{0}-meta.json'.format(str(project_id)), 'w') as f:
+        json.dump(meta, f)
 
+    task_states = {}
     if task_ids is None:
         print "No task specified. Trying all tasks starting at 0 (until 10 failures, assuming incremental numbering)"
         numFails = 0
         t_id = 0
         while numFails < 10:
-            print "### Task {0} status:".format(str(t_id))
-            print getTaskStatus(project_id, t_id)
+            s = getTaskStatus(project_id, t_id)
+            task_states[t_id] = s
 
-            print "### getting task image...", t_id
-            success = getTaskImage(project_id, t_id, TMS_url)
-            print ' Success' if success else ' FAILED.'
-            numFails = numFails + 1 if not success else 0
+            print "### getting task data...", t_id
+            nDownloaded = getTilesAndMapData(project_id, t_id, TMS_url)
+            print ' Success' if nDownloaded is not None else ' FAILED.'
+            numFails = numFails + 1 if nDownloaded is None else 0
             t_id += 1
     else:
         for t_id in task_ids:
-            print "### Task {0} status:".format(str(t_id))
-            print getTaskStatus(project_id, t_id)
+            s = getTaskStatus(project_id, t_id)
+            task_states[t_id] = s
 
-            print "### getting task...", t_id,
-            success = getTaskImage(project_id, t_id, TMS_url)
-            print ' Success' if success else ' FAILED.'
+            print "### getting task data...", t_id
+            nDownloaded = getTilesAndMapData(project_id, t_id, TMS_url)
+            print ' Success' if nDownloaded is not None else ' FAILED.'
+    print '### Saving task states'
+    with open('project-{0}-taskstates.json'.format(str(project_id)), 'w') as f:
+        json.dump(task_states, f)
