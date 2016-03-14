@@ -1,0 +1,506 @@
+name: "largenet"
+# Data
+    layer {
+      name: "data"
+      type: "DenseImageData"
+      top: "data"
+      top: "label"
+      dense_image_data_param {
+        root_folder: "/home/ubuntu/data/home/ubuntu/data/osm-hot-labeled/"
+        source:      "/home/ubuntu/data/home/ubuntu/data/osm-hot-labeled/data_pixelLabels_train.txt"
+        batch_size: 15   			# Change this number to a batch size that will fit on your GPU
+        shuffle: true
+      }
+      include: { phase: TRAIN }
+    }
+    layer {
+      name: "data"
+      type: "DenseImageData"
+      top: "data"
+      top: "label"
+      dense_image_data_param {
+        root_folder: "/home/ubuntu/data/home/ubuntu/data/osm-hot-labeled/"
+        source:      "/home/ubuntu/data/home/ubuntu/data/osm-hot-labeled/data_pixelLabels_val.txt"
+        batch_size: 1                       # Change this number to a batch size that will fit on your GPU
+        shuffle: true
+      }
+      include: { phase: TEST }
+    }
+# End Data
+# Encoder Unit 1
+    layer {
+      name: "conv1"
+      type: "Convolution"
+      bottom: "data"
+      top: "conv1"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 64
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      name: "conv1_bn"
+      bottom: "conv1"
+      top: "conv1"
+      type: "BN"
+      bn_param {
+      	scale_filler {
+      	  type: "constant"
+      	  value: 1
+      	}
+      	shift_filler {
+      	  type: "constant"
+      	  value: 0.001
+      	}
+     }
+    }
+    layer {
+      name: "relu1"
+      type: "ReLU"
+      bottom: "conv1"
+      top: "conv1"
+    }
+    layer {
+      name: "pool1"
+      type: "Pooling"
+      bottom: "conv1"
+      top: "pool1"
+      top: "pool1_mask"
+      pooling_param {
+        pool: MAX
+        kernel_size: 4
+        stride: 4
+      }
+    }
+# End Encoder Unit 1
+# Encoder Unit 2
+    layer {
+      name: "conv2"
+      type: "Convolution"
+      bottom: "pool1"
+      top: "conv2"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 64
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      name: "relu2"
+      type: "ReLU"
+      bottom: "conv2"
+      top: "conv2"
+    }
+# End Encoder Unit 2
+# Encoder Unit 3
+    layer {
+      name: "conv3"
+      type: "Convolution"
+      bottom: "conv2"
+      top: "conv3"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 128
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      name: "conv3_bn"
+      bottom: "conv3"
+      top: "conv3"
+      type: "BN"
+      bn_param {
+        scale_filler {
+          type: "constant"
+          value: 1
+        }
+        shift_filler {
+          type: "constant"
+          value: 0.001
+        }
+     }
+    }
+    layer {
+      name: "relu3"
+      type: "ReLU"
+      bottom: "conv3"
+      top: "conv3"
+    }
+    layer {
+      name: "pool3"
+      type: "Pooling"
+      bottom: "conv3"
+      top: "pool3"
+      top: "pool3_mask"
+      pooling_param {
+        pool: MAX
+        kernel_size: 2
+        stride: 2
+      }
+    }
+# End Encoder Unit 3
+# Encoder Unit 4
+    layer {
+      name: "conv4"
+      type: "Convolution"
+      bottom: "pool3"
+      top: "conv4"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 256
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      name: "relu4"
+      type: "ReLU"
+      bottom: "conv4"
+      top: "conv4"
+    }
+    layer {
+      name: "pool4"
+      type: "Pooling"
+      bottom: "conv4"
+      top: "pool4"
+      top: "pool4_mask"
+      pooling_param {
+        pool: MAX
+        kernel_size: 2
+        stride: 2
+      }
+    }
+# End Encoder Unit 4
+
+## MIDDLE OF NET, START DECONVOLUTING!
+
+# Decoder Unit 4
+    layer {
+      name: "upsample4"
+      type: "Upsample"
+      bottom: "pool4"
+      bottom: "pool4_mask"
+      top: "upsample4"
+      upsample_param {
+        scale: 2
+      }
+    }
+    layer {
+      name: "conv_decode4"
+      type: "Convolution"
+      bottom: "upsample4"
+      top: "conv_decode4"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 128
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      bottom: "conv_decode4"
+      top: "conv_decode4"
+      name: "conv_decode4_bn"
+      type: "BN"
+      bn_param {
+    	scale_filler {
+    	  type: "constant"
+    	  value: 1
+    	}
+    	shift_filler {
+    	  type: "constant"
+    	  value: 0.001
+    	}
+     }
+    }
+    layer {
+      name: "relu_decode4"
+      type: "ReLU"
+      bottom: "conv_decode4"
+      top: "conv_decode4"
+    }
+# End Decoder Unit 4
+# Decoder Unit 3
+    layer {
+      name: "upsample3"
+      type: "Upsample"
+      bottom: "conv_decode4"
+      bottom: "pool3_mask"
+      top: "upsample3"
+      upsample_param {
+        scale: 2
+      }
+    }
+    layer {
+      name: "conv_decode3"
+      type: "Convolution"
+      bottom: "upsample3"
+      top: "conv_decode3"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 128
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      name: "relu_decode3"
+      type: "ReLU"
+      bottom: "conv_decode3"
+      top: "conv_decode3"
+    }
+# End Decoder Unit 3
+# Decoder Unit 2
+    layer {
+      name: "conv_decode2"
+      type: "Convolution"
+      bottom: "conv_decode3"
+      top: "conv_decode2"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 64
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      bottom: "conv_decode2"
+      top: "conv_decode2"
+      name: "conv_decode2_bn"
+      type: "BN"
+      bn_param {
+      scale_filler {
+        type: "constant"
+        value: 1
+      }
+      shift_filler {
+        type: "constant"
+        value: 0.001
+      }
+     }
+    }
+    layer {
+      name: "relu_decode2"
+      type: "ReLU"
+      bottom: "conv_decode2"
+      top: "conv_decode2"
+    }
+# End Decoder Unit 2
+# Decoder Unit 1
+    layer {
+      name: "upsample1"
+      type: "Upsample"
+      bottom: "conv_decode2"
+      bottom: "pool1_mask"
+      top: "upsample1"
+      upsample_param {
+        scale: 4
+      }
+    }
+    layer {
+      name: "conv_decode1"
+      type: "Convolution"
+      bottom: "upsample1"
+      top: "conv_decode1"
+      param {
+        lr_mult: 1
+        decay_mult: 1
+      }
+      param {
+        lr_mult: 1
+        decay_mult: 0
+      }
+      convolution_param {
+        num_output: 64
+        kernel_size: 3
+        pad: 1
+        stride: 1
+        weight_filler {
+          type: "msra"
+        }
+        bias_filler {
+          type: "constant"
+        }
+      }
+    }
+    layer {
+      bottom: "conv_decode1"
+      top: "conv_decode1"
+      name: "conv_decode1_bn"
+      type: "BN"
+      bn_param {
+      scale_filler {
+        type: "constant"
+        value: 1
+      }
+      shift_filler {
+        type: "constant"
+        value: 0.001
+      }
+     }
+    }
+    layer {
+      name: "relu_decode1"
+      type: "ReLU"
+      bottom: "conv_decode1"
+      top: "conv_decode1"
+    }
+# End Decoder Unit 1
+
+
+# Start classifier unit
+layer {
+  name: "conv_classifier"
+  type: "Convolution"
+  bottom: "conv_decode1"
+  top: "conv_classifier"
+  param {
+    lr_mult: 1
+    decay_mult: 1
+  }
+  param {
+    lr_mult: 2
+    decay_mult: 0
+  }
+  convolution_param {
+    num_output: 7
+    kernel_size: 1
+    stride: 1
+    weight_filler {
+      type: "msra"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+# End classifier unit
+# Start loss & accuracy
+layer {
+  name: "loss"
+  type: "SoftmaxWithLoss"
+  bottom: "conv_classifier"
+  bottom: "label"
+  top: "loss"
+  softmax_param {engine: CAFFE}
+  loss_param: {
+    weight_by_label_freqs: true
+    class_weighting: 0.24
+    class_weighting: 4
+    class_weighting: 3
+    class_weighting: 1
+    class_weighting: 1
+    class_weighting: 1
+    class_weighting: 1
+  }
+}
+layer {
+  name: "accuracy"
+  type: "Accuracy"
+  bottom: "conv_classifier"
+  bottom: "label"
+  top: "accuracy"
+  top: "per_class_accuracy"
+}

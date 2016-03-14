@@ -1,0 +1,25 @@
+# LarsNet
+net: "/home/ubuntu/segnet/models/larsnet/xlargenet-train.prototxt"
+test_initialization: false
+
+test_iter: 200 # how many tst iterations
+test_interval: 120 # how often test
+display: 10
+
+#edit xlargenet 2: increase this drastically
+iter_size: 20
+
+base_lr: 0.1
+lr_policy: "step"
+gamma: 0.50
+stepsize: 120
+weight_decay: 0.0000001
+
+solver_type: ADAGRAD
+# not in adagrad: momentum: 0.9
+
+max_iter: 1000000
+
+snapshot: 240
+snapshot_prefix: "/home/ubuntu/segnet/models/larsnet/snaps/snap_xlargenet2_"
+solver_mode: GPU

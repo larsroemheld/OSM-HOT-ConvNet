@@ -1,0 +1,24 @@
+# LarsNet
+net: "/home/ubuntu/segnet/models/larsnet/larsnet-train.prototxt"
+test_initialization: false
+
+test_iter: 200 # how many tst iterations
+test_interval: 200 # how often test
+display: 10
+
+iter_size: 5
+
+base_lr: 0.01 #0.1 originally
+lr_policy: "step"
+gamma: 0.1
+stepsize: 1000
+weight_decay: 0.000005
+
+solver_type: ADAGRAD
+# not in adagrad: momentum: 0.9
+
+max_iter: 1000000
+
+snapshot: 500
+snapshot_prefix: "/home/ubuntu/segnet/models/larsnet/snaps/snap_3cont2_"
+solver_mode: GPU

@@ -6,11 +6,9 @@ Lars Roemheld, roemheld@stanford.edu
 '''
 __author__ = 'Lars Roemheld'
 
-from PIL import Image
 import sys, os
 from scipy import misc
 import numpy as np
-import matplotlib.pyplot as plt
 
 folder = sys.argv[1]
 

@@ -1,4 +1,9 @@
-__author__ = 'lars'
+'''
+Parses a log file as created by caffe and plots learning curves.
+
+Lars Roemheld, roemheld@stanford.edu
+'''
+__author__ = 'Lars Roemheld'
 
 import re
 import matplotlib.pyplot as plt

@@ -1,5 +1,5 @@
 '''
-Given a caffe-formatted ImageData file, split the file into train, val, test parts
+Given a caffe-formatted ImageData file, randomly split the file into train, val, test parts
 
 Lars Roemheld, roemheld@stanford.edu
 '''
