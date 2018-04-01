@@ -6,4 +6,5 @@ This project uses satellite imagery to support map creation in the developing wo
 See the pdf-report for details.
 
 I recommend this later report for more sophisticated approaches to classifying buildings specifically:
+https://medium.com/the-downlinq/object-detection-on-spacenet-5e691961d257
 https://devblogs.nvidia.com/parallelforall/exploring-spacenet-dataset-using-digits/
